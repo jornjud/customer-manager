@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from 'react';
 
@@ -11,20 +11,27 @@ interface Customer {
 
 export default function Home() {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({ firstName: '', lastName: '', customerCode: '' });
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [githubConfigured, setGithubConfigured] = useState(false);
+  const [commitStatus, setCommitStatus] = useState('');
 
   useEffect(() => {
     fetchCustomers();
-    // Check if GitHub is configured
-    fetch('/api/github-status').then(res => res.json()).then(data => {
-      setGithubConfigured(data.configured);
-    }).catch(() => setGithubConfigured(false));
+    checkGitHubConfig();
   }, []);
+
+  const checkGitHubConfig = async () => {
+    try {
+      const res = await fetch('/api/github-config');
+      const data = await res.json();
+      setGithubConfigured(data.configured);
+    } catch {
+      setGithubConfigured(false);
+    }
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -34,45 +41,49 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to fetch customers:', error);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingCustomer) {
-      // Update
-      await fetch('/api/customers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, id: editingCustomer.id }),
-      });
-    } else {
-      // Create
-      await fetch('/api/customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+    try {
+      if (editingCustomer) {
+        await fetch('/api/customers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formData, id: editingCustomer.id }),
+        });
+        setCommitStatus('✏️ Updated and committed to GitHub!');
+      } else {
+        await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+        setCommitStatus('➕ Added and committed to GitHub!');
+      }
+      
+      await fetchCustomers();
+      closeModal();
+      setTimeout(() => setCommitStatus(''), 3000);
+    } catch (error) {
+      console.error('Failed to save customer:', error);
     }
-    
-    setShowModal(false);
-    setEditingCustomer(null);
-    setFormData({ firstName: '', lastName: '', customerCode: '' });
-    fetchCustomers();
-  };
-
-  const handleEdit = (customer: Customer) => {
-    setEditingCustomer(customer);
-    setFormData({ firstName: customer.firstName, lastName: customer.lastName, customerCode: customer.customerCode });
-    setShowModal(true);
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`/api/customers?id=${id}`, { method: 'DELETE' });
-    setDeleteConfirm(null);
-    fetchCustomers();
+    if (!confirm('คุณแน่ใจหรือไม่ที่จะลบลูกค้าคนนี้?')) return;
+    
+    try {
+      await fetch(`/api/customers?id=${id}`, { method: 'DELETE' });
+      setCommitStatus('🗑️ Deleted and committed to GitHub!');
+      await fetchCustomers();
+      setTimeout(() => setCommitStatus(''), 3000);
+    } catch (error) {
+      console.error('Failed to delete customer:', error);
+    }
   };
 
   const openAddModal = () => {
@@ -81,62 +92,60 @@ export default function Home() {
     setShowModal(true);
   };
 
-  if (loading) {
+  const openEditModal = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setFormData({ 
+      firstName: customer.firstName, 
+      lastName: customer.lastName || '', 
+      customerCode: customer.customerCode 
+    });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingCustomer(null);
+    setFormData({ firstName: '', lastName: '', customerCode: '' });
+  };
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-xl text-gray-600">กำลังโหลด...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">👥 Customer Manager</h1>
-            <p className="text-gray-600 mt-1">จัดการข้อมูลลูกค้า 3BB</p>
+            <h1 className="text-3xl font-bold text-gray-800">👥 จัดการลูกค้า</h1>
+            <p className="text-gray-500 mt-1">รวม {customers.length} คน</p>
+          </div>
+          <div className="mt-4 md:mt-0 flex items-center gap-4">
+            {commitStatus && (
+              <span className="text-green-600 font-medium animate-pulse">{commitStatus}</span>
+            )}
             {!githubConfigured && (
-              <p className="text-orange-500 text-sm mt-1">⚠️ GitHub Auto-commit: ยังไม่ได้ตั้งค่า</p>
+              <span className="text-amber-600 text-sm">⚠️ GitHub ยังไม่ได้ตั้งค่า</span>
             )}
-            {githubConfigured && (
-              <p className="text-green-500 text-sm mt-1">✅ GitHub Auto-commit: เปิดใช้งาน</p>
-            )}
-          </div>
-          <button
-            onClick={openAddModal}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-lg hover:shadow-xl flex items-center gap-2"
-          >
-            <span>+</span> เพิ่มลูกค้า
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="text-3xl font-bold text-indigo-600">{customers.length}</div>
-            <div className="text-gray-500">ลูกค้าทั้งหมด</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="text-3xl font-bold text-green-600">
-              {customers.filter(c => c.lastName).length}
-            </div>
-            <div className="text-gray-500">มีนามสกุล</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="text-3xl font-bold text-blue-600">
-              {customers.filter(c => !c.lastName).length}
-            </div>
-            <div className="text-gray-500">ไม่มีนามสกุล</div>
+            <button
+              onClick={openAddModal}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-lg"
+            >
+              <span>➕</span> เพิ่มลูกค้า
+            </button>
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-indigo-600 text-white">
+              <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <tr>
                   <th className="px-6 py-4 text-left font-semibold">#</th>
                   <th className="px-6 py-4 text-left font-semibold">ชื่อ</th>
@@ -147,46 +156,29 @@ export default function Home() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {customers.map((customer, index) => (
-                  <tr key={customer.id} className="hover:bg-indigo-50 transition-colors">
+                  <tr key={customer.id} className="hover:bg-blue-50 transition-colors">
                     <td className="px-6 py-4 text-gray-500">{index + 1}</td>
                     <td className="px-6 py-4 font-medium text-gray-800">{customer.firstName}</td>
                     <td className="px-6 py-4 text-gray-600">{customer.lastName || '-'}</td>
                     <td className="px-6 py-4">
-                      <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm font-mono">
+                      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-mono">
                         {customer.customerCode}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-center gap-2">
                         <button
-                          onClick={() => handleEdit(customer)}
-                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm transition-colors"
+                          onClick={() => openEditModal(customer)}
+                          className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                         >
-                          แก้ไข
+                          ✏️ แก้ไข
                         </button>
-                        {deleteConfirm === customer.id ? (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handleDelete(customer.id)}
-                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm transition-colors"
-                            >
-                              ยืนยัน
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirm(null)}
-                              className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1 rounded-lg text-sm transition-colors"
-                            >
-                              ยกเลิก
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeleteConfirm(customer.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm transition-colors"
-                          >
-                            ลบ
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleDelete(customer.id)}
+                          className="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          🗑️ ลบ
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -197,7 +189,7 @@ export default function Home() {
           
           {customers.length === 0 && (
             <div className="text-center py-12 text-gray-500">
-              <p className="text-xl">ไม่มีข้อมูลลูกค้า</p>
+              <p className="text-xl">ยังไม่มีลูกค้า</p>
               <p className="mt-2">กดปุ่ม "เพิ่มลูกค้า" เพื่อเริ่มต้น</p>
             </div>
           )}
@@ -207,64 +199,58 @@ export default function Home() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-800">
-                {editingCustomer ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้าใหม่'}
-              </h2>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ชื่อ <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.firstName}
-                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="กรอกชื่อ"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    นามสกุล
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.lastName}
-                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="กรอกนามสกุล (ถ้ามี)"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    รหัสลูกค้า <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.customerCode}
-                    onChange={(e) => setFormData({ ...formData, customerCode: e.target.value })}
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
-                    placeholder="เช่น 450193618"
-                  />
-                </div>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">
+              {editingCustomer ? '✏️ แก้ไขลูกค้า' : '➕ เพิ่มลูกค้าใหม่'}
+            </h2>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">ชื่อ *</label>
+                <input
+                  type="text"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="กรอกชื่อ"
+                />
               </div>
+              
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">นามสกุล</label>
+                <input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="กรอกนามสกุล (ถ้ามี)"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">รหัสลูกค้า *</label>
+                <input
+                  type="text"
+                  value={formData.customerCode}
+                  onChange={(e) => setFormData({ ...formData, customerCode: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                  placeholder="กรอกรหัสลูกค้า"
+                />
+              </div>
+              
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => { setShowModal(false); setEditingCustomer(null); }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={closeModal}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-medium transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors"
                 >
                   {editingCustomer ? 'บันทึก' : 'เพิ่ม'}
                 </button>
