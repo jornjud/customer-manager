@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import { NextResponse } from 'next/server';
 import path from 'path';
+import { commitToGitHub, isGitHubConfigured } from '@/lib/github';
 
 const dataFilePath = path.join(process.cwd(), 'data', 'customers.json');
 
@@ -36,6 +37,19 @@ export async function POST(request: Request) {
     customers.push(newCustomer);
     await fs.writeFile(dataFilePath, JSON.stringify(customers, null, 2), 'utf-8');
     
+    // Commit to GitHub if configured
+    if (isGitHubConfigured()) {
+      try {
+        await commitToGitHub(
+          'data/customers.json',
+          JSON.stringify(customers, null, 2),
+          `➕ Add customer: ${newCustomer.firstName} ${newCustomer.lastName} (${newCustomer.customerCode})`
+        );
+      } catch (githubError) {
+        console.error('GitHub commit failed:', githubError);
+      }
+    }
+    
     return NextResponse.json(newCustomer);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to add customer' }, { status: 500 });
@@ -54,6 +68,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
     
+    const oldCustomer = customers[index];
     customers[index] = {
       id: body.id,
       firstName: body.firstName,
@@ -62,6 +77,19 @@ export async function PUT(request: Request) {
     };
     
     await fs.writeFile(dataFilePath, JSON.stringify(customers, null, 2), 'utf-8');
+    
+    // Commit to GitHub if configured
+    if (isGitHubConfigured()) {
+      try {
+        await commitToGitHub(
+          'data/customers.json',
+          JSON.stringify(customers, null, 2),
+          `✏️ Update customer: ${body.firstName} ${body.lastName} (${body.customerCode})`
+        );
+      } catch (githubError) {
+        console.error('GitHub commit failed:', githubError);
+      }
+    }
     
     return NextResponse.json(customers[index]);
   } catch (error) {
@@ -78,12 +106,26 @@ export async function DELETE(request: Request) {
     const data = await fs.readFile(dataFilePath, 'utf-8');
     let customers = JSON.parse(data);
     
+    const deletedCustomer = customers.find((c: any) => c.id === id);
     const filtered = customers.filter((c: any) => c.id !== id);
     if (filtered.length === customers.length) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
     
     await fs.writeFile(dataFilePath, JSON.stringify(filtered, null, 2), 'utf-8');
+    
+    // Commit to GitHub if configured
+    if (isGitHubConfigured() && deletedCustomer) {
+      try {
+        await commitToGitHub(
+          'data/customers.json',
+          JSON.stringify(filtered, null, 2),
+          `🗑️ Delete customer: ${deletedCustomer.firstName} ${deletedCustomer.lastName} (${deletedCustomer.customerCode})`
+        );
+      } catch (githubError) {
+        console.error('GitHub commit failed:', githubError);
+      }
+    }
     
     return NextResponse.json({ success: true });
   } catch (error) {
