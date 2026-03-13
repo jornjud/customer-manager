@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 
 interface Customer {
-  id: number;
+  id: string;
   firstName: string;
   lastName: string;
   customerCode: string;
+  reference1?: string;
+  reference2?: string;
 }
 
 export default function Home() {
@@ -14,24 +16,18 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [formData, setFormData] = useState({ firstName: '', lastName: '', customerCode: '' });
-  const [githubConfigured, setGithubConfigured] = useState(false);
-  const [commitStatus, setCommitStatus] = useState('');
+  const [formData, setFormData] = useState({ 
+    firstName: '', 
+    lastName: '', 
+    customerCode: '',
+    reference1: '',
+    reference2: ''
+  });
+  const [saveStatus, setSaveStatus] = useState('');
 
   useEffect(() => {
     fetchCustomers();
-    checkGitHubConfig();
   }, []);
-
-  const checkGitHubConfig = async () => {
-    try {
-      const res = await fetch('/api/github-config');
-      const data = await res.json();
-      setGithubConfigured(data.configured);
-    } catch {
-      setGithubConfigured(false);
-    }
-  };
 
   const fetchCustomers = async () => {
     try {
@@ -49,38 +45,45 @@ export default function Home() {
     e.preventDefault();
     
     try {
+      const payload = {
+        ...formData,
+        reference1: formData.customerCode, // Reference 1 = รหัสลูกค้า
+        reference2: formData.reference2 || '0' + String(Math.floor(10000000 + Math.random() * 90000000)), // Reference 2 = 09xxxxxxx
+      };
+      
       if (editingCustomer) {
         await fetch('/api/customers', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...formData, id: editingCustomer.id }),
+          body: JSON.stringify({ ...payload, id: editingCustomer.id }),
         });
-        setCommitStatus('✏️ Updated and committed to GitHub!');
+        setSaveStatus('✅ บันทึกสำเร็จ!');
       } else {
         await fetch('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
-        setCommitStatus('➕ Added and committed to GitHub!');
+        setSaveStatus('✅ เพิ่มสำเร็จ!');
       }
       
       await fetchCustomers();
       closeModal();
-      setTimeout(() => setCommitStatus(''), 3000);
+      setTimeout(() => setSaveStatus(''), 3000);
     } catch (error) {
       console.error('Failed to save customer:', error);
+      setSaveStatus('❌ เกิดข้อผิดพลาด');
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('คุณแน่ใจหรือไม่ที่จะลบลูกค้าคนนี้?')) return;
     
     try {
       await fetch(`/api/customers?id=${id}`, { method: 'DELETE' });
-      setCommitStatus('🗑️ Deleted and committed to GitHub!');
+      setSaveStatus('✅ ลบสำเร็จ!');
       await fetchCustomers();
-      setTimeout(() => setCommitStatus(''), 3000);
+      setTimeout(() => setSaveStatus(''), 3000);
     } catch (error) {
       console.error('Failed to delete customer:', error);
     }
@@ -88,16 +91,24 @@ export default function Home() {
 
   const openAddModal = () => {
     setEditingCustomer(null);
-    setFormData({ firstName: '', lastName: '', customerCode: '' });
+    setFormData({ 
+      firstName: '', 
+      lastName: '', 
+      customerCode: '',
+      reference1: '',
+      reference2: '000000000' // Default: 000000000
+    });
     setShowModal(true);
   };
 
   const openEditModal = (customer: Customer) => {
     setEditingCustomer(customer);
     setFormData({ 
-      firstName: customer.firstName, 
+      firstName: customer.firstName || '', 
       lastName: customer.lastName || '', 
-      customerCode: customer.customerCode 
+      customerCode: customer.customerCode || '',
+      reference1: customer.reference1 || customer.customerCode || '',
+      reference2: customer.reference2 || ''
     });
     setShowModal(true);
   };
@@ -105,7 +116,7 @@ export default function Home() {
   const closeModal = () => {
     setShowModal(false);
     setEditingCustomer(null);
-    setFormData({ firstName: '', lastName: '', customerCode: '' });
+    setFormData({ firstName: '', lastName: '', customerCode: '', reference1: '', reference2: '' });
   };
 
   if (isLoading) {
@@ -126,11 +137,8 @@ export default function Home() {
             <p className="text-gray-500 mt-1">รวม {customers.length} คน</p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center gap-4">
-            {commitStatus && (
-              <span className="text-green-600 font-medium animate-pulse">{commitStatus}</span>
-            )}
-            {!githubConfigured && (
-              <span className="text-amber-600 text-sm">⚠️ GitHub ยังไม่ได้ตั้งค่า</span>
+            {saveStatus && (
+              <span className="text-green-600 font-medium animate-pulse">{saveStatus}</span>
             )}
             <button
               onClick={openAddModal}
@@ -141,41 +149,56 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Note */}
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
+          <p className="text-blue-700">
+            📝 <strong>หมายเหตุ:</strong> 
+            Reference 1 = รหัสลูกค้า | 
+            Reference 2 = เลข 09 ตัว (ใช้สำหรับบันทึกสลิป)
+          </p>
+        </div>
+
         {/* Table */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <tr>
-                  <th className="px-6 py-4 text-left font-semibold">#</th>
-                  <th className="px-6 py-4 text-left font-semibold">ชื่อ</th>
-                  <th className="px-6 py-4 text-left font-semibold">นามสกุล</th>
-                  <th className="px-6 py-4 text-left font-semibold">รหัสลูกค้า</th>
-                  <th className="px-6 py-4 text-center font-semibold">จัดการ</th>
+                  <th className="px-4 py-4 text-left font-semibold">#</th>
+                  <th className="px-4 py-4 text-left font-semibold">ชื่อ</th>
+                  <th className="px-4 py-4 text-left font-semibold">นามสกุล</th>
+                  <th className="px-4 py-4 text-left font-semibold">Ref.1<br/><span className="text-xs font-normal">(รหัสลูกค้า)</span></th>
+                  <th className="px-4 py-4 text-left font-semibold">Ref.2<br/><span className="text-xs font-normal">(09xxxxxxx)</span></th>
+                  <th className="px-4 py-4 text-center font-semibold">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {customers.map((customer, index) => (
                   <tr key={customer.id} className="hover:bg-blue-50 transition-colors">
-                    <td className="px-6 py-4 text-gray-500">{index + 1}</td>
-                    <td className="px-6 py-4 font-medium text-gray-800">{customer.firstName}</td>
-                    <td className="px-6 py-4 text-gray-600">{customer.lastName || '-'}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4 text-gray-500">{index + 1}</td>
+                    <td className="px-4 py-4 font-medium text-gray-800">{customer.firstName}</td>
+                    <td className="px-4 py-4 text-gray-600">{customer.lastName || '-'}</td>
+                    <td className="px-4 py-4">
                       <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-mono">
-                        {customer.customerCode}
+                        {customer.reference1 || customer.customerCode}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-mono">
+                        {customer.reference2 || '-'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
                       <div className="flex justify-center gap-2">
                         <button
                           onClick={() => openEditModal(customer)}
-                          className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                          className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                         >
                           ✏️ แก้ไข
                         </button>
                         <button
                           onClick={() => handleDelete(customer.id)}
-                          className="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                          className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                         >
                           🗑️ ลบ
                         </button>
@@ -233,10 +256,23 @@ export default function Home() {
                 <input
                   type="text"
                   value={formData.customerCode}
-                  onChange={(e) => setFormData({ ...formData, customerCode: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, customerCode: e.target.value, reference1: e.target.value })}
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
                   placeholder="กรอกรหัสลูกค้า"
+                />
+                <p className="text-xs text-gray-500 mt-1">→ จะใช้เป็น Reference 1 อัตโนมัติ</p>
+              </div>
+              
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">Reference 2 (09xxxxxxx)</label>
+                <input
+                  type="text"
+                  value={formData.reference2}
+                  onChange={(e) => setFormData({ ...formData, reference2: e.target.value })}
+                  maxLength={9}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
+                  placeholder="เลข 09 ตัว"
                 />
               </div>
               

@@ -25,6 +25,8 @@ export async function POST(request: Request) {
       firstName: body.firstName,
       lastName: body.lastName || '',
       customerCode: body.customerCode,
+      reference1: body.reference1 || body.customerCode, // Reference 1 = รหัสลูกค้า
+      reference2: body.reference2 || '000000000', // Reference 2 = 000000000
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -34,6 +36,8 @@ export async function POST(request: Request) {
       firstName: body.firstName,
       lastName: body.lastName || '',
       customerCode: body.customerCode,
+      reference1: body.reference1 || body.customerCode,
+      reference2: body.reference2,
     };
 
     return NextResponse.json(newCustomer);
@@ -52,6 +56,8 @@ export async function PUT(request: Request) {
       firstName: body.firstName,
       lastName: body.lastName || '',
       customerCode: body.customerCode,
+      reference1: body.reference1 || body.customerCode,
+      reference2: body.reference2,
       updatedAt: new Date().toISOString(),
     });
 
@@ -60,6 +66,8 @@ export async function PUT(request: Request) {
       firstName: body.firstName,
       lastName: body.lastName || '',
       customerCode: body.customerCode,
+      reference1: body.reference1,
+      reference2: body.reference2,
     };
 
     return NextResponse.json(updatedCustomer);
